@@ -4,6 +4,16 @@
 #include <HX8347_kbv.h>
 #include "Keyboard.h"
 
+// TOUCH SCREEN CALIBRATION
+// Run the calibration routine and update the MIN/MAX for X/Y
+//
+#define TS_MINX 320
+#define TS_MAXX 3850
+#define TS_MINY 3800
+#define TS_MAXY 305
+
+// TFT CONFIGURATION
+// These pins should correspond with your TFT display wiring
 #define LCD_CS      A3
 #define LCD_CD      A2
 #define LCD_WR      A1
@@ -12,8 +22,8 @@
 #define TIRQ_PIN    3
 #define TFT_PIN     4
 
-uint8_t running;
 
+// 5:6:5 Color codes (RGB)
 #define BLACK   0x0000
 #define BLUE    0x001F
 #define RED     0xF800
@@ -24,6 +34,7 @@ uint8_t running;
 #define WHITE   0xFFFF
 #define ORANGE  0xFD00
 
+// Key event definitions
 #define KEY_F13   0xF0 
 #define KEY_F14   0xF1 
 #define KEY_F15   0xF2 
@@ -39,6 +50,7 @@ uint8_t running;
 
 boolean t1, t2, t3, t4, t5  , t6, t7, t8, t9, t10   , t11, t12;
 boolean t1h;
+
 XPT2046_Touchscreen tss(TFT_PIN, TIRQ_PIN);
 HX8347_kbv tft;
 
@@ -55,8 +67,8 @@ void loop() {
   write_Jinput();
   if (tss.touched()) {
     TS_Point p = tss.getPoint();
-    p.x = map(p.x, 320, 3850, 0, 480);
-    p.y = map(p.y, 3800 , 305, 0, 320);
+    p.x = map(p.x, MINX, MAXX, 0, 480);
+    p.y = map(p.y, MINY, MAXY, 0, 320);
 
     //################## Code for actions here ##################
     //################## LINE 1 ##################
