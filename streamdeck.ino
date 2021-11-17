@@ -42,14 +42,10 @@ boolean t1h;
 XPT2046_Touchscreen tss(TFT_PIN, TIRQ_PIN);
 HX8347_kbv tft;
 
-uint16_t g_identifier;
 void setup(void) {
   Serial.begin(9600);
   Serial.setTimeout(50);
-  tft.begin(g_identifier);
-  g_identifier = tft.readID();
-  if (g_identifier == 0x00D3) g_identifier = 0x9486;
-  if (g_identifier == 0xFFFF) g_identifier = 0x9341;
+  tft.begin();
   initial();
   Keyboard.begin();
   tss.begin();
