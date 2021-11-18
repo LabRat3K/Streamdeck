@@ -72,25 +72,43 @@ void loop() {
 
     //################## Code for actions here ##################
 
+    // Determine if touch point is in a row
+    unsigned byte button_id = 0x00;
+
+    if (p.y >  80 && p.y < 150) {
+        button_id = 0x00;
+    } else {
+       if (p.y > 165 && p.y < 235) {
+           button_id = 0x05; // Row index * Column count
+       } else {
+          if (p.y > 245 && p.y < 315) {
+              button_id = 0x0A; // Row index * Column count
+          } else {
+            // Not in a row - return (not found)
+            // Is a delay needed here?
+            return;
+          }
+       }
+    }
+
     // Determine if touch point is in a column
     // Note: Optimized to a cascade - no need to test after positive 
-    unsigned byte column_id= 0x00;
     if (p.x >  20 && p.x <  90) { 
-       column_id = 1; 
+       button_id+=0; // It's a NOP to fill this branch
     } else {
        if (p.x > 115 && p.x < 180) {
-          column_id = 2; 
+          button_id += 1; 
        } else {
           if (p.x > 200 && p.x < 275) {
-              column_id = 3;
+              button_id+= 2;
           } else { 
              if (p.x > 290 && p.x < 365) {
-                 column_id = 4;
+                 button_id+= 3;
              } else {
                 if (p.x > 385 && p.x < 455) {
-                    column_id = 5;
+                    button_id+= 4;
                 } else {
-                  // Not in a column - we can exit and return
+                  // Not in a column - return (not found)
                   // Is a delay needed here?
                   return;
                 }
@@ -99,36 +117,7 @@ void loop() {
        }
     }
 
-    // Determine if touch point is in a row
-    unsigned byte row_id = 0x00;
-    if (p.y >  80 && p.y < 150) {
-        row_id = 0x01;
-    } else {
-       if (p.y > 165 && p.y < 235) {
-           row_id = 0x02;
-       } else {
-          if (p.y > 245 && p.y < 315) {
-              row_id = 0x03;
-          } else {
-            // Not in a row - we can exit and return
-            // Is a delay needed here?
-            return;
-          }
-       }
-    }
-
-    // For a valid button press this will be in the range of 6-20
-    unsigned byte button_id = (row_id*5)+column_id;
-   
-    if (button_id > 5) {
-      button_id -= 6; // Convert to 0 to 14 
-      // We can use this as an index in a lookup table..
-      // to determine what KEY_xxx to send and/or a vector 
-      // call for message handlers. (Optimize the switch/case below)
-    } else {
-       // Something went wrong.. this should not be possible
-       return;
-    }
+    // button_id now contains a value in range of 0x00 - 0x0E
 
     switch (button_id) {
        //################## LINE 1 ##################
