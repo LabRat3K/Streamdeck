@@ -77,8 +77,8 @@ void loop() {
   write_Jinput();
   if (tss.touched()) {
     TS_Point p = tss.getPoint();
-    p.x = map(p.x, MINX, MAXX, 0, 480);
-    p.y = map(p.y, MINY, MAXY, 0, 320);
+    p.x = map(p.x, TS_MINX, TS_MAXX, 0, 480);
+    p.y = map(p.y, TS_MINY, TS_MAXY, 0, 320);
 
     //################## Code for actions here ##################
 
