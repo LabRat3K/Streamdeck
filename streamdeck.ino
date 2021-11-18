@@ -72,28 +72,67 @@ void loop() {
 
     //################## Code for actions here ##################
 
-    // Determine touch point is in a column
-    unsigned byte intersections= 0x00;
-    if (p.x >  20 && p.x <  90) intersections |= 0x01;
-    if (p.x > 115 && p.x < 180) intersections |= 0x02;
-    if (p.x > 200 && p.x < 275) intersections |= 0x04;
-    if (p.x > 290 && p.x < 365) intersections |= 0x08;
-    if (p.x > 385 && p.x < 455) intersections |= 0x10;
+    // Determine if touch point is in a column
+    // Note: Optimized to a cascade - no need to test after positive 
+    unsigned byte column_id= 0x00;
+    if (p.x >  20 && p.x <  90) { 
+       column_id = 1; 
+    } else {
+       if (p.x > 115 && p.x < 180) {
+          column_id = 2; 
+       } else {
+          if (p.x > 200 && p.x < 275) {
+              column_id = 3;
+          } else { 
+             if (p.x > 290 && p.x < 365) {
+                 column_id = 4;
+             } else {
+                if (p.x > 385 && p.x < 455) {
+                    column_id = 5;
+                } else {
+                  // Not in a column - we can exit and return
+                  // Is a delay needed here?
+                  return;
+                }
+             }
+          }
+       }
+    }
 
+    // Determine if touch point is in a row
+    unsigned byte row_id = 0x00;
+    if (p.y >  80 && p.y < 150) {
+        row_id = 0x01;
+    } else {
+       if (p.y > 165 && p.y < 235) {
+           row_id = 0x02;
+       } else {
+          if (p.y > 245 && p.y < 315) {
+              row_id = 0x03;
+          } else {
+            // Not in a row - we can exit and return
+            // Is a delay needed here?
+            return;
+          }
+       }
+    }
 
-    if (p.y >  80 && p.y < 150)  intersection |= 0x20;
-    if (p.y > 165 && p.y < 235)  intersection |= 0x40;
-    if (p.y > 245 && p.y < 315)  intersection |= 0x80;
+    // For a valid button press this will be in the range of 6-20
+    unsigned byte button_id = (row_id*5)+column_id;
+   
+    if (button_id > 5) {
+      button_id -= 6; // Convert to 0 to 14 
+      // We can use this as an index in a lookup table..
+      // to determine what KEY_xxx to send and/or a vector 
+      // call for message handlers. (Optimize the switch/case below)
+    } else {
+       // Something went wrong.. this should not be possible
+       return;
+    }
 
-/* 
-   Now we can use a single byte to identify if a key is pressed 
-   Top Row: 0x21, 0x22, 0x24, 0x28, 0x30
-   2nd Row: 0x41, 0x42, 0x44, 0x48, 0x50
-   3rd Row: 0x81, 0x82, 0x84, 0x88, 0x90
-*/
-    switch (intersections) {
+    switch (button_id) {
        //################## LINE 1 ##################
-       case 0x21:
+       case 0x00:
 	      if (t1) {
 		draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
 		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
@@ -111,7 +150,7 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F13);
               break;
-       case 0x22:
+       case 0x01:
 	      if (t2) {
 		draw_re(70, 60, GREEN, "TS", "Mic", "ON");;
 		t2 = false;
@@ -121,18 +160,18 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F15);
               break;
-       case 0x24:
+       case 0x02:
 	      Keyboard.write(KEY_F17);
               break;
-       case 0x28:
+       case 0x03:
 	      Keyboard.write(KEY_F18);
               break;
-       case 0x30:
+       case 0x04:
 	      Keyboard.write(KEY_F19);
               break;
 
        //################## LINE 2 ##################
-       case 0x41:
+       case 0x05:
 	      if (t6) {
 		if (t1h == false) {
 		  draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
@@ -148,7 +187,7 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F14);
               break;
-       case 0x42:
+       case 0x06:
 	      if (t7) {
 		draw_re(70, 120, GREEN, "TS", "Speaker", "ON");
 		t7 = false;
@@ -158,12 +197,12 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F16);
 	      break;
-       case 0x44:
-       case 0x48:
-       case 0x50: // Currently these don't do anything
+       case 0x07:
+       case 0x08:
+       case 0x09: // Currently these don't do anything
               break;
        //################## LINE 3 ##################
-       case 0x81:
+       case 0x0A:
 	      if (t11) {
 		draw_re(10, 180, CYAN, "OBS", "Mic", "ON");
 		t11 = false;
@@ -173,7 +212,7 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F23);
 	      break;
-       case 0x82:
+       case 0x0B:
 	      if (t12) {
 		draw_re(70, 180, CYAN, "OBS", "Speaker", "ON");
 		t12 = false;
@@ -183,17 +222,17 @@ void loop() {
 	      }
 	      Keyboard.write(KEY_F24);
 	      break;
-       case 0x84:
+       case 0x0C:
 	      Keyboard.write(KEY_F20);
               break;
-       case 0x88:
+       case 0x0D:
 	      Keyboard.write(KEY_F21);
               break;
-       case 0x90:
+       case 0x0E:
 	      Keyboard.write(KEY_F22);
               break;
        default: {
-              // Do Nothing - this was not a keypress
+              // Error Scenario - this should not be possible
               }
     } // End SWITCH 
     delay(500);
