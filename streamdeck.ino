@@ -48,8 +48,18 @@
 #define KEY_F23   0xFA
 #define KEY_F24   0xFB
 
-boolean t1, t2, t3, t4, t5  , t6, t7, t8, t9, t10   , t11, t12;
-boolean t1h;
+boolean auto_enable_mic;
+
+// Set of Boolean flags to denote the ON/OFF state for modal switches
+// Some simple #define macros to set, clear, query, and toggle the bits
+// NOTE: This assumes that the number of buttons is 16 or less. Change
+// to uint32_t if you need more
+uint16_t press_state = 0x00;
+
+#define set_state(x)    (press_state |=  (1<<x))
+#define clr_state(x)    (press_state &= ~(1<<x))
+#define qry_state(x)    ((press_state & (1<<x))>0)
+#define toggle_state(x) (press_state ^=  (1<<x))
 
 XPT2046_Touchscreen tss(TFT_PIN, TIRQ_PIN);
 HX8347_kbv tft;
@@ -121,31 +131,32 @@ void loop() {
 
     switch (button_id) {
        //################## LINE 1 ##################
-       case 0x00:
-	      if (t1) {
-		draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
-		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
-		t6 = false;
-		t1 = false;
-		t1h = false;
-	      } else {
-		if (t6) {
-		  t1h = false;
-		} else {
-		  t1h = true;
-		}
+       case 0x00: // Dischord MICROPHONE 
+              toggle_state(0x00);
+	      if (qry_state(0x00)) {  // MUTE request
 		draw_re(10, 60, RED, "DISC", "Mic", "OFF");
-		t1 = true;
+
+		if (qry_state(0x05)) { // Is the DISCHORD speaker muted?
+		  auto_enable_mic = true; // Yes.. speaker is already muted
+		} else {
+		  auto_enable_mic = false;  
+		}
+	      } else {
+		draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
+
+		clr_state(0x05); // Enable DISCHORD speaker
+		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
+
+		auto_enable_mic = false;
 	      }
 	      Keyboard.write(KEY_F13);
               break;
        case 0x01:
-	      if (t2) {
-		draw_re(70, 60, GREEN, "TS", "Mic", "ON");;
-		t2 = false;
-	      } else {
+              toggle_state(0x01);
+	      if (qry_state(0x01)) {
 		draw_re(70, 60, RED, "TS", "Mic", "OFF");
-		t2 = true;
+	      } else {
+		draw_re(70, 60, GREEN, "TS", "Mic", "ON");;
 	      }
 	      Keyboard.write(KEY_F15);
               break;
@@ -160,29 +171,31 @@ void loop() {
               break;
 
        //################## LINE 2 ##################
-       case 0x05:
-	      if (t6) {
-		if (t1h == false) {
-		  draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
-		  t1 = false;
-		}
-		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
-		t6 = false;
-	      } else {
+       case 0x05:  // DISCHORD speaker state
+              toggle_state(0x05);
+	      if (qry_state(0x05)) { // Mute Speaker request
 		draw_re(10, 120, RED, "DISC", "Speaker", "OFF");
+
+                // Update the MIC as well - change to MUTED
 		draw_re(10, 60, RED, "DISC", "Mic", "OFF");
-		t6 = true;
-		t1 = true;
+		set_state(0x00); 
+	      } else {
+		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
+
+                // check if we auto_enable_mic 
+		if (auto_enable_mic == true) { 
+		  draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
+		  clr_state(0x00); // Update DISCHORD MIC status
+		}
 	      }
 	      Keyboard.write(KEY_F14);
               break;
        case 0x06:
-	      if (t7) {
-		draw_re(70, 120, GREEN, "TS", "Speaker", "ON");
-		t7 = false;
-	      } else {
+              toggle_state(0x06);
+	      if (qry_state(0x06)) {
 		draw_re(70, 120, RED, "TS", "Speaker", "OFF");
-		t7 = true;
+	      } else {
+		draw_re(70, 120, GREEN, "TS", "Speaker", "ON");
 	      }
 	      Keyboard.write(KEY_F16);
 	      break;
@@ -192,22 +205,20 @@ void loop() {
               break;
        //################## LINE 3 ##################
        case 0x0A:
-	      if (t11) {
-		draw_re(10, 180, CYAN, "OBS", "Mic", "ON");
-		t11 = false;
-	      } else {
+              toggle_state(0x0A);
+	      if (qry_state(0x0A)) {
 		draw_re(10, 180, RED, "OBS", "Mic", "OFF");
-		t11 = true;
+	      } else {
+		draw_re(10, 180, CYAN, "OBS", "Mic", "ON");
 	      }
 	      Keyboard.write(KEY_F23);
 	      break;
        case 0x0B:
-	      if (t12) {
-		draw_re(70, 180, CYAN, "OBS", "Speaker", "ON");
-		t12 = false;
-	      } else {
+              toggle_state(0x0B);
+	      if (qry_state(0x0B)) {
 		draw_re(70, 180, RED, "OBS", "Speaker", "OFF");
-		t12 = true;
+	      } else {
+		draw_re(70, 180, CYAN, "OBS", "Speaker", "ON");
 	      }
 	      Keyboard.write(KEY_F24);
 	      break;
@@ -230,12 +241,20 @@ void loop() {
 
 void initial() {
   //################## Initial ##################
+  unsigned short i;
+
+  for (i=0;i<0x0F;i++) { // Default modal for each button
+     clr_state(i); // Buttons are "OFF"
+  }
+
+  // Setup the LCD
   tft.setRotation(3);
   tft.fillScreen(RED);
   tft.fillScreen(WHITE);
   tft.fillScreen(BLACK);
   tft.setTextColor(WHITE);
 
+  // Draw the buttons
   draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
   draw_re(70, 60, GREEN, "TS", "Mic", "ON");
   draw_re(130, 60, ORANGE, "OBS", "Scene", "Idle");
@@ -257,13 +276,13 @@ void initial() {
 }
 
 void draw_re(int x, int y) {
-  //Lenght: 32 + 20 = 52
+  //Length: 32 + 20 = 52
   int dist = 10;
   tft.drawRect(x, y, 32 + 2 * dist, 32 + 2 * dist, WHITE);
 }
 
 void draw_re(int x, int y, uint16_t color, String txt1, String txt2, String txt3) {
-  //Lenght: 32 + 20 = 52
+  //Length: 32 + 20 = 52
   int dist = 10;
   int txtdst = 5;
   tft.drawRect(x, y, 32 + 2 * dist, 32 + 2 * dist, WHITE);
