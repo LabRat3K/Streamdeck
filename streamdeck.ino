@@ -71,110 +71,131 @@ void loop() {
     p.y = map(p.y, MINY, MAXY, 0, 320);
 
     //################## Code for actions here ##################
-    //################## LINE 1 ##################
-    if (p.x > 20 && p.x < 90 && p.y > 80 && p.y < 150) {
-      if (t1) {
-        draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
-        draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
-        t6 = false;
-        t1 = false;
-        t1h = false;
-      } else {
-        if (t6) {
-          t1h = false;
-        } else {
-          t1h = true;
-        }
-        draw_re(10, 60, RED, "DISC", "Mic", "OFF");
-        t1 = true;
-      }
-      Keyboard.write(KEY_F13);
-    }
-    if (p.x > 115 && p.x < 180 && p.y > 80 && p.y < 150) {
-      if (t2) {
-        draw_re(70, 60, GREEN, "TS", "Mic", "ON");;
-        t2 = false;
-      } else {
-        draw_re(70, 60, RED, "TS", "Mic", "OFF");
-        t2 = true;
-      }
-      Keyboard.write(KEY_F15);
-    }
-    if (p.x > 200 && p.x < 275 && p.y > 80 && p.y < 150) {
-      Keyboard.write(KEY_F17);
-    }
-    if (p.x > 290 && p.x < 365 && p.y > 80 && p.y < 150) {
-      Keyboard.write(KEY_F18);
-    }
-    if (p.x > 385 && p.x < 455 && p.y > 80 && p.y < 150) {
-      Keyboard.write(KEY_F19);
-    }
+
+    // Determine touch point is in a column
+    unsigned byte intersections= 0x00;
+    if (p.x >  20 && p.x <  90) intersections |= 0x01;
+    if (p.x > 115 && p.x < 180) intersections |= 0x02;
+    if (p.x > 200 && p.x < 275) intersections |= 0x04;
+    if (p.x > 290 && p.x < 365) intersections |= 0x08;
+    if (p.x > 385 && p.x < 455) intersections |= 0x10;
 
 
-    //################## LINE 2 ##################
-    if (p.x > 20 && p.x < 90 && p.y > 165 && p.y < 235) {
-      if (t6) {
-        if (t1h == false) {
-          draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
-          t1 = false;
-        }
-        draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
-        t6 = false;
-      } else {
-        draw_re(10, 120, RED, "DISC", "Speaker", "OFF");
-        draw_re(10, 60, RED, "DISC", "Mic", "OFF");
-        t6 = true;
-        t1 = true;
-      }
-      Keyboard.write(KEY_F14);
-    }
-    if (p.x > 115 && p.x < 180 && p.y > 165 && p.y < 235) {
-      if (t7) {
-        draw_re(70, 120, GREEN, "TS", "Speaker", "ON");
-        t7 = false;
-      } else {
-        draw_re(70, 120, RED, "TS", "Speaker", "OFF");
-        t7 = true;
-      }
-      Keyboard.write(KEY_F16);
-    }
-    if (p.x > 200 && p.x < 275 && p.y > 165 && p.y < 235) {
-    }
-    if (p.x > 290 && p.x < 365 && p.y > 165 && p.y < 235) {
-    }
-    if (p.x > 385 && p.x < 455 && p.y > 165 && p.y < 235) {
-    }
+    if (p.y >  80 && p.y < 150)  intersection |= 0x20;
+    if (p.y > 165 && p.y < 235)  intersection |= 0x40;
+    if (p.y > 245 && p.y < 315)  intersection |= 0x80;
 
-    //################## LINE 3 ##################
-    if (p.x > 20 && p.x < 90 && p.y > 245 && p.y < 315) {
-      if (t11) {
-        draw_re(10, 180, CYAN, "OBS", "Mic", "ON");
-        t11 = false;
-      } else {
-        draw_re(10, 180, RED, "OBS", "Mic", "OFF");
-        t11 = true;
-      }
-      Keyboard.write(KEY_F23);
-    }
-    if (p.x > 115 && p.x < 180 && p.y > 245 && p.y < 315) {
-      if (t12) {
-        draw_re(70, 180, CYAN, "OBS", "Speaker", "ON");
-        t12 = false;
-      } else {
-        draw_re(70, 180, RED, "OBS", "Speaker", "OFF");
-        t12 = true;
-      }
-      Keyboard.write(KEY_F24);
-    }
-    if (p.x > 200 && p.x < 275 && p.y > 245 && p.y < 315) {
-      Keyboard.write(KEY_F20);
-    }
-    if (p.x > 290 && p.x < 365 && p.y > 245 && p.y < 315) {
-      Keyboard.write(KEY_F21);
-    }
-    if (p.x > 385 && p.x < 455 && p.y > 245 && p.y < 315) {
-      Keyboard.write(KEY_F22);
-    }
+/* 
+   Now we can use a single byte to identify if a key is pressed 
+   Top Row: 0x21, 0x22, 0x24, 0x28, 0x30
+   2nd Row: 0x41, 0x42, 0x44, 0x48, 0x50
+   3rd Row: 0x81, 0x82, 0x84, 0x88, 0x90
+*/
+    switch (intersections) {
+       //################## LINE 1 ##################
+       case 0x21:
+	      if (t1) {
+		draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
+		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
+		t6 = false;
+		t1 = false;
+		t1h = false;
+	      } else {
+		if (t6) {
+		  t1h = false;
+		} else {
+		  t1h = true;
+		}
+		draw_re(10, 60, RED, "DISC", "Mic", "OFF");
+		t1 = true;
+	      }
+	      Keyboard.write(KEY_F13);
+              break;
+       case 0x22:
+	      if (t2) {
+		draw_re(70, 60, GREEN, "TS", "Mic", "ON");;
+		t2 = false;
+	      } else {
+		draw_re(70, 60, RED, "TS", "Mic", "OFF");
+		t2 = true;
+	      }
+	      Keyboard.write(KEY_F15);
+              break;
+       case 0x24:
+	      Keyboard.write(KEY_F17);
+              break;
+       case 0x28:
+	      Keyboard.write(KEY_F18);
+              break;
+       case 0x30:
+	      Keyboard.write(KEY_F19);
+              break;
+
+       //################## LINE 2 ##################
+       case 0x41:
+	      if (t6) {
+		if (t1h == false) {
+		  draw_re(10, 60, GREEN, "DISC", "Mic", "ON");
+		  t1 = false;
+		}
+		draw_re(10, 120, GREEN, "DISC", "Speaker", "ON");
+		t6 = false;
+	      } else {
+		draw_re(10, 120, RED, "DISC", "Speaker", "OFF");
+		draw_re(10, 60, RED, "DISC", "Mic", "OFF");
+		t6 = true;
+		t1 = true;
+	      }
+	      Keyboard.write(KEY_F14);
+              break;
+       case 0x42:
+	      if (t7) {
+		draw_re(70, 120, GREEN, "TS", "Speaker", "ON");
+		t7 = false;
+	      } else {
+		draw_re(70, 120, RED, "TS", "Speaker", "OFF");
+		t7 = true;
+	      }
+	      Keyboard.write(KEY_F16);
+	      break;
+       case 0x44:
+       case 0x48:
+       case 0x50: // Currently these don't do anything
+              break;
+       //################## LINE 3 ##################
+       case 0x81:
+	      if (t11) {
+		draw_re(10, 180, CYAN, "OBS", "Mic", "ON");
+		t11 = false;
+	      } else {
+		draw_re(10, 180, RED, "OBS", "Mic", "OFF");
+		t11 = true;
+	      }
+	      Keyboard.write(KEY_F23);
+	      break;
+       case 0x82:
+	      if (t12) {
+		draw_re(70, 180, CYAN, "OBS", "Speaker", "ON");
+		t12 = false;
+	      } else {
+		draw_re(70, 180, RED, "OBS", "Speaker", "OFF");
+		t12 = true;
+	      }
+	      Keyboard.write(KEY_F24);
+	      break;
+       case 0x84:
+	      Keyboard.write(KEY_F20);
+              break;
+       case 0x88:
+	      Keyboard.write(KEY_F21);
+              break;
+       case 0x90:
+	      Keyboard.write(KEY_F22);
+              break;
+       default: {
+              // Do Nothing - this was not a keypress
+              }
+    } // End SWITCH 
     delay(500);
   }
 }
