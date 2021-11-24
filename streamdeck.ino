@@ -7,9 +7,10 @@
  *
  * Updated by LabRat in 2021
  *
- * Note: Attempts to use graphics read from the TFT on the LCD have 
+ * Note: Attempts to use graphics read from the SD  on the LCD have 
  * been abandoned, as this takes up too much FLASH space, and won't
- * fit on the Leonardo. Perhaps revisit this in the future.
+ * fit on the Leonardo. Perhaps revisit this in the future if we can 
+ * shrink the GFX library.
  */
 
 // Update these to reflect your display/touchscreen
@@ -17,7 +18,16 @@
 #include <MCUFRIEND_kbv.h>
 
 #include <TouchScreen.h>
-#include <Keyboard.h>
+// Uncomment in order to print x,y,zfor all "touch" events detected
+//#define DEBUG_TOUCH
+
+// Uncomment if you aren't using a button mask to delineate the virtual buttons
+//#define OUTLINE_BUTTONS
+
+#if defined(ARDUINO_AVR_LEONARDO)
+  #define HID_OUTPUT
+  #include <Keyboard.h>
+#endif
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~
 // TOUCH SCREEN CALIBRATION
@@ -143,7 +153,7 @@ void setup(void) {
 
   draw_screen(); // Render default buttons
   
-  #if defined(ARDUINO_AVR_LEONARDO)
+  #if defined(HID_OUTPUT)
   Keyboard.begin();
   #endif
 }
@@ -164,6 +174,8 @@ void loop() {
    Serial.print(p.x);
    Serial.print(",");
    Serial.println(p.y);
+   Serial.print(",");
+   Serial.println(p.z);
    #endif
 
     //################## Code for actions here ##################
@@ -214,145 +226,129 @@ void loop() {
     }
 
     // button_id now contains a value in range of 0x00 - 0x0E
+    #ifdef DEBUG_TOUCH
+    Serial.print(F("ButtonId:"));
+    Serial.println(button_id,HEX);
+    #endif
 
     switch (button_id) {
        //################## LINE 1 ##################
        case 0x00: // Dischord MICROPHONE 
-              toggle_state(0x00);
-              if (qry_state(0x00)) {  // MUTE request
-            		draw_re(0x00, WHITE, "DISC", "Mic", "OFF",RED);
+		toggle_state(0x00);
+		if (qry_state(0x00)) {  // MUTE request
+			draw_re(0x00, WHITE, RED);
             
-            		if (qry_state(0x05)) { // Is the DISCHORD speaker muted?
-            		  auto_enable_mic = true; // Yes.. speaker is already muted
-            		} else {
-            		  auto_enable_mic = false;  
-            		}
-	            } else {
-            		draw_re(0x00, GREEN, "DISC", "Mic", "ON");
-            
-            		clr_state(0x05); // Enable DISCHORD speaker
-            		draw_re(0x05, GREEN, "DISC", "Speaker", "ON");
-            
-            		auto_enable_mic = false;
-	            }
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F13);
-              #endif
-              break;
+			if (qry_state(0x05)) { // Is the DISCHORD speaker muted?
+				auto_enable_mic = true; // Yes.. speaker is already muted
+			} else {
+				auto_enable_mic = false;  
+			}
+		} else {
+			draw_re(0x00, GREEN );
+
+			clr_state(0x05); // Enable DISCHORD speaker
+			draw_re(0x05, GREEN );
+
+			auto_enable_mic = false;
+		}
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F13);
+		#endif
+		break;
        case 0x01:
-              toggle_state(0x01);
-      	      if (qry_state(0x01)) {
-      		      draw_re(0x01, WHITE, "TS", "Mic", "OFF",RED);
-      	      } else {
-      		      draw_re(0x01, GREEN, "TS", "Mic", "ON");;
-      	      }
+		toggle_state(0x01);
+		if (qry_state(0x01)) {
+			draw_re(0x01, WHITE, RED);
+		} else {
+			draw_re(0x01, GREEN );;
+		}
        
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F15);
-              #endif
-              break;
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F15);
+		#endif
+		break;
        case 0x02:
-/*
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F17);
-              #endif
-              break;
-*/
        case 0x03:
-/*
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F18);
-              #endif
-              break;
-*/
        case 0x04:
-              #if defined(ARDUINO_AVR_LEONARDO) 
-//	            Keyboard.write(KEY_F19);
-	            Keyboard.write(KEY_F17+(button_id-0x02));
-              #endif
-              break;
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F17+(button_id-0x02));
+		#endif
+		draw_re(button_id, BLACK,ORANGE);
+		delay(250);
+		draw_re(button_id, ORANGE);
+		break;
 
        //################## LINE 2 ##################
        case 0x05:  // DISCHORD speaker state
-              toggle_state(0x05);
-      	      if (qry_state(0x05)) { // Mute Speaker request
-            		draw_re(0x05, WHITE, "DISC", "Speaker", "OFF",RED);
+		toggle_state(0x05);
+		if (qry_state(0x05)) { // Mute Speaker request
+			draw_re(0x05, WHITE, RED);
       
-                // Update the MIC as well - change to MUTED
-      		      draw_re(0x00, WHITE, "DISC", "Mic", "OFF",RED);
-		            set_state(0x00); 
-	            } else {
-		            draw_re(0x05, GREEN, "DISC", "Speaker", "ON");
+			// Update the MIC as well - change to MUTED
+			draw_re(0x00, WHITE, RED);
+			set_state(0x00); 
+		} else {
+			draw_re(0x05, GREEN);
 
-                // check if we auto_enable_mic 
-            		if (auto_enable_mic == true) { 
-            		  draw_re(0x00, GREEN, "DISC", "Mic", "ON");
-            		  clr_state(0x00); // Update DISCHORD MIC status
-            		}
-	            }
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F14);
-              #endif
-              break;
+			// check if we auto_enable_mic 
+			if (auto_enable_mic == true) { 
+				draw_re(0x00, GREEN);
+				clr_state(0x00); // Update DISCHORD MIC status
+			}
+		}
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F14);
+		#endif
+		break;
        case 0x06:
-              toggle_state(0x06);
-      	      if (qry_state(0x06)) {
-            		draw_re(0x06, WHITE, "TS", "Speaker", "OFF",RED);
-      	      } else {
-            		draw_re(0x06, GREEN, "TS", "Speaker", "ON");
-      	      }
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F16);
-              #endif
-	            break;
+		toggle_state(0x06);
+		if (qry_state(0x06)) {
+			draw_re(0x06, WHITE, RED);
+		} else {
+			draw_re(0x06, GREEN);
+		}
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F16);
+		#endif
+		break;
        case 0x07:
        case 0x08:
        case 0x09: // Currently these don't do anything
               break;
        //################## LINE 3 ##################
        case 0x0A:
-              toggle_state(0x0A);
-      	      if (qry_state(0x0A)) {
-            		draw_re(0x0A, WHITE, "OBS", "Mic", "OFF",RED);
-      	      } else {
-            		draw_re(0x0A, CYAN, "OBS", "Mic", "ON");
-      	      }
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F23);
-              #endif
-	            break;
+		toggle_state(0x0A);
+		if (qry_state(0x0A)) {
+			draw_re(0x0A, WHITE, RED);
+		} else {
+			draw_re(0x0A, CYAN );
+		}
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F23);
+		#endif
+		break;
        case 0x0B:
-              toggle_state(0x0B);
-      	      if (qry_state(0x0B)) {
-            		draw_re(0x0B, WHITE, "OBS", "Speaker", "OFF",RED);
-      	      } else {
-            		draw_re(0x0B, CYAN, "OBS", "Speaker", "ON");
-      	      }
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F24);
-              #endif
-	            break;
-/* Code Saving Attempt */
+		toggle_state(0x0B);
+		if (qry_state(0x0B)) {
+			draw_re(0x0B, WHITE, RED);
+		} else {
+			draw_re(0x0B, CYAN );
+		}
+		#if defined(HID_OUTPUT) 
+		Keyboard.write(KEY_F24);
+		#endif
+		break;
        case 0x0C:
-/*
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F20);
-              #endif
-              break;
-*/
        case 0x0D:
-/*
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            Keyboard.write(KEY_F21);
-              #endif
-              break;
-*/
        case 0x0E:
-              #if defined(ARDUINO_AVR_LEONARDO) 
-	            //Keyboard.write(KEY_F22);
-	            Keyboard.write(KEY_F20+(button_id-0x0C));
-              #endif
-              break;
+		#if defined(HID_OUTPUT) 
+		//Keyboard.write(KEY_F22);
+		Keyboard.write(KEY_F20+(button_id-0x0C));
+		#endif
+		draw_re(button_id, BLACK, ORANGE);
+		delay(250);
+		draw_re(button_id, ORANGE);
+		break;
        default: {
               // Error Scenario - this should not be possible
              }
@@ -385,68 +381,55 @@ const char  BUTTONS[15][4][8] = {
 void draw_screen() {
   
   // Draw the buttons
-  //draw_re(0x00, GREEN, "DISC", "Mic", "ON");
   draw_re(0x00, GREEN);
-  //draw_re(0x01, GREEN, "TS", "Mic", "ON");
   draw_re(0x01, GREEN);
-  draw_re(0x02, ORANGE, "OBS", "Scene", "Idle");
-  draw_re(0x03, ORANGE, "OBS", "Timer", "ON/OFF");
-  draw_re(0x04, ORANGE, "OBS", "Scene", "Active");
+  draw_re(0x02, ORANGE);
+  draw_re(0x03, ORANGE);
+  draw_re(0x04, ORANGE);
 
-  draw_re(0x05, GREEN, "DISC", "Speaker", "ON");
-  draw_re(0x06, GREEN, "TS", "Speaker", "ON");
+  draw_re(0x05, GREEN);
+  draw_re(0x06, GREEN);
   draw_re(0x07);
   draw_re(0x08);
   draw_re(0x09);
 
-  draw_re(0x0A, CYAN, "OBS", "Mic", "ON");
-  draw_re(0x0B, CYAN, "OBS", "Speaker", "ON");
-  draw_re(0x0C, ORANGE, "OBS", "Scene", "OW");
-  draw_re(0x0D, ORANGE, "OBS", "Scene", "PUBG");
-  draw_re(0x0E, ORANGE, "OBS", "Scene", "SoW");
+  draw_re(0x0A, CYAN);
+  draw_re(0x0B, CYAN);
+  draw_re(0x0C, ORANGE);
+  draw_re(0x0D, ORANGE);
+  draw_re(0x0E, ORANGE);
 
 }
 
-#define USE_ROUND_RECT
+
 void draw_re(uint8_t bid) {
-#ifdef USE_ROUND_RECT
+  // Empty Button(s)
+  #ifdef OUTLINE_BUTTONS
   tft.drawRoundRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)])),
            pgm_read_word(&(ROW_MAP[ROW(bid)])), 
            BWIDTH, BHEIGHT, min(BWIDTH,BHEIGHT)/4, WHITE);
-#else
-  tft.fillRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)])),
-           pgm_read_word(&(ROW_MAP[ROW(bid)])), 
-           BWIDTH, BHEIGHT,  WHITE);
-  tft.fillRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)]))+1,
-           pgm_read_word(&(ROW_MAP[ROW(bid)]))+1, 
-           BWIDTH-2, BHEIGHT-2,  BLACK);
-#endif
+  #endif
 }
 
 void draw_re(uint8_t bid, uint16_t color) {
-   draw_re(bid, color, BUTTONS[bid][0], BUTTONS[bid][1],BUTTONS[bid][2],BLACK);
+   // Button(s) - normal state - Strings[0-2]
+   draw_re(bid, color, BUTTONS[bid][0], BUTTONS[bid][1],BUTTONS[bid][2], BLACK);
 }
 
 void draw_re(uint8_t bid, uint16_t color, uint16_t bgcolor) {
+   // Button(s) - pressed state - Strings[0-1,3]
    draw_re(bid, color, BUTTONS[bid][0], BUTTONS[bid][1],BUTTONS[bid][3],bgcolor);
 }
 
-void draw_re(uint8_t bid, uint16_t color, String txt1, String txt2, String txt3) {
-   draw_re(bid, color, txt1, txt2, txt3, BLACK);
-}
 void draw_re(uint8_t bid, uint16_t color, String txt1, String txt2, String txt3, uint16_t bgcolor) {
   int x = pgm_read_word(&(COLUMN_MAP[COLUMN(bid)]));
   int y = pgm_read_word(&(ROW_MAP[ROW(bid)]));
   int txtdst = 5;
 
-#ifdef USE_ROUND_RECT
+  #ifdef OUTLINE_BUTTONS
   tft.drawRoundRect(x, y, BWIDTH, BHEIGHT,min(BWIDTH,BHEIGHT)/4, WHITE);
+  #endif
   tft.fillRoundRect(x + 1, y + 1, BWIDTH-2, BHEIGHT-2,min(BWIDTH-2, BHEIGHT-2)/4, bgcolor);
-#else
-  //tft.drawRect(x, y, BWIDTH, BHEIGHT,WHITE);
-  tft.fillRect(x, y, BWIDTH, BHEIGHT,WHITE);
-  tft.fillRect(x + 1, y + 1, BWIDTH-2, BHEIGHT-2,bgcolor);
-#endif
   
   tft.setTextColor(color);
   //tft.setCursor(x + txtdst, y + txtdst+10);
