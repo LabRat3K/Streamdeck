@@ -6,6 +6,7 @@
 
 # Stream Deck 4 Arduino
 inspired by Elgato
+updated by LabRat - restructured code trying to make room for Graphics routines. Not there yet.
 
 ### Used Libarys
 * [Adafruit GFX graphics core library](https://github.com/adafruit/Adafruit-GFX-Library)
@@ -13,8 +14,8 @@ inspired by Elgato
 ===============================
 
 ### Used Hardware
-* ARDUINO LEONARDO ~ 18€
-* 2.8 inch TFT Resistive Arduino Touch LCD Shield 320×240 ~ 19€
+* ARDUINO LEONARDO 
+* 3.5 inch TFT Resistive Arduino Touch LCD Shield 320×480 
 
 ===============================
 
@@ -27,4 +28,6 @@ You can use the Arduino without the Java Application.
 
 ### Result
 
-<img align="left" src="https://i.imgur.com/81qnupm.jpg" height="40%" width="40%">
+The stand is 3 parts (Faceplate, Enclosure, Stand), and STL files can be found in the resources sub-directory.
+
+<img align="left" src="https://github.com/LabRat3K/Streamdeck/blob/dev/resources/img/alpha_prototype.png">
