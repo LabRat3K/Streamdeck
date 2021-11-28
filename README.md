@@ -1,8 +1,8 @@
 <img align="right" src="https://i.imgur.com/Gfo25Of.png" height="30%" width="30%">
 
-[![version](https://img.shields.io/github/release/tekks/Streamdeck/all.svg?style=flat-square)](https://github.com/Tekks/Streamdeck/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/tekks/Streamdeck.svg?style=flat-square)](https://github.com/Tekks/Streamdeck/commits/master)
-[![license](https://img.shields.io/github/license/tekks/Streamdeck.svg?style=flat-square)](https://github.com/Tekks/Streamdeck/blob/master/LICENSE)
+[![version](https://img.shields.io/github/release/LabRat3K/Streamdeck/all.svg?style=flat-square)](https://github.com/Tekks/Streamdeck/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/LabRat3K/Streamdeck.svg?style=flat-square)](https://github.com/LabRat3K/Streamdeck/commits/master)
+[![license](https://img.shields.io/github/license/LabRat3K/Streamdeck.svg?style=flat-square)](https://github.com/LabRat3K/Streamdeck/blob/master/LICENSE)
 
 # Stream Deck 4 Arduino
 inspired by Elgato
