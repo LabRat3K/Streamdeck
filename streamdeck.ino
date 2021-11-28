@@ -118,7 +118,7 @@ boolean auto_enable_mic;
 #define XGAP 6
 #define YGAP 10
 
-#define COLUMN_1 (XGAP/2)
+#define COLUMN_1 (XGAP/2)-5
 #define COLUMN_2 (COLUMN_1+BWIDTH+XGAP)
 #define COLUMN_3 (COLUMN_2+BWIDTH+XGAP)
 #define COLUMN_4 (COLUMN_3+BWIDTH+XGAP)
@@ -140,9 +140,11 @@ const uint16_t PROGMEM ROW_MAP[3]    = { ROW_1, ROW_2, ROW_3 };
 // MAIN CODE BLOCK 
 //
 void setup(void) {
+  #ifdef DEBUG_TOUCH
   Serial.begin(115200);
-  while (!Serial) { ; } /* Wait for Serial setup to complete */
+  while (!Serial) { ; } // Wait for Serial setup to complete 
   Serial.println(F("Stream Deck"));
+  #endif
 
   tft.reset();
   tft.begin(0x9486); // Hard-coded versus probing the hardware
@@ -173,7 +175,7 @@ void loop() {
    #ifdef DEBUG_TOUCH
    Serial.print(p.x);
    Serial.print(",");
-   Serial.println(p.y);
+   Serial.print(p.y);
    Serial.print(",");
    Serial.println(p.z);
    #endif
