@@ -1,4 +1,3 @@
-
 /* ---------------------------------------------------------------
  * streamdeck.ino 
  * 
@@ -12,6 +11,15 @@
  * been abandoned, as this takes up too much FLASH space, and won't
  * fit on the Leonardo. Perhaps revisit this in the future if we can 
  * shrink the GFX library.
+ *
+ *
+ * To Do:
+ *    EEPROM for BUTTON array:
+ *       - move button array to be stored/read in/from EEPROM
+ *       - provide ability to receive a new array/config and flash to EEPROM
+ *       - (alternatively could read from SD card)
+ *    CTRL/ALT Keypress combinations?
+ *       - Could use a bit mask to denote if any KEY modifiers should be used
  */
 
 // Update these to reflect your display/touchscreen
@@ -21,9 +29,13 @@
 #include <TouchScreen.h>
 
 // Uncomment to enable serial console debugging
-#define DEBUG
-// Uncomment in order to print x,y,zfor all "touch" events detected
-#define DEBUG_TOUCH
+// Note: Leonardo will pause until a serial connection is established
+//
+//#define DEBUG
+
+
+// Uncomment in order to print x,y,z for all "touch" events detected
+//#define DEBUG_TOUCH
 
 // Uncomment if you aren't using a button mask to delineate the virtual buttons
 //#define OUTLINE_BUTTONS
@@ -32,9 +44,6 @@
   #define HID_OUTPUT
   #include <Keyboard.h>
 #endif
-
-// Configuration Data
-#include <EEPROM.h>
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~
 // TOUCH SCREEN CALIBRATION
@@ -85,23 +94,6 @@ const uint16_t PROGMEM COLOR_MAP[8] = { 0x0000, 0x001F, 0xF800, 0x07E0, 0x07FF, 
 
 MCUFRIEND_kbv tft;
 
-// ~~~~~~~~~~~~~~~~~~~~~~
-// KEYBOARD CONFIGURATION
-// Key event definitions
-//
-#define KEY_F13   0xF0 
-#define KEY_F14   0xF1 
-#define KEY_F15   0xF2 
-#define KEY_F16   0xF3 
-#define KEY_F17   0xF4 
-#define KEY_F18   0xF5 
-#define KEY_F19   0xF6 
-#define KEY_F20   0xF7 
-#define KEY_F21   0xF8 
-#define KEY_F22   0xF9 
-#define KEY_F23   0xFA
-#define KEY_F24   0xFB
-
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // VIRTUAL BUTTON CONFIGURATION
 // Button State Information
@@ -117,15 +109,14 @@ uint16_t press_state = 0x00;
 #define qry_state(x)    ((press_state & (1<<x))>0)
 #define toggle_state(x) (press_state ^=  (1<<x))
 
-// Specific to DISCHORD buttons 
-boolean auto_enable_mic;
-
 // Define the Button Layout & Size and store in FLASH (save the RAM)
 #define BWIDTH 90
 #define BHEIGHT 90
 #define XGAP 6
 #define YGAP 10
 
+
+// Note: the use of an extra offset to adjust the buttons to match the enclosure
 #define COLUMN_1 (XGAP/2)-5
 #define COLUMN_2 (COLUMN_1+BWIDTH+XGAP)
 #define COLUMN_3 (COLUMN_2+BWIDTH+XGAP)
@@ -142,6 +133,45 @@ const uint16_t PROGMEM ROW_MAP[3]    = { ROW_1, ROW_2, ROW_3 };
 
 #define COLUMN(x) (x%(sizeof(COLUMN_MAP)/sizeof(uint16_t)))
 #define ROW(x)    (x/(sizeof(COLUMN_MAP)/sizeof(uint16_t)))
+
+// Data Structure to contain all BUTTON information (location, strings, colors, keycodes)
+#define BT_NONE      (0x00)
+#define BT_MOMENTARY (0x01)
+#define BT_LATCHING  (0x02)
+#define BT_LINKSET   (0x03)
+#define BT_LINKCLR   (0x04)
+
+struct tButton {
+   uint8_t btype;          // Button Type - Momentary, Latching, Linked
+   char    bStrings[4][8]; // 3 lines plus alternate third line when ENABLED
+   uint8_t color;
+   uint8_t keyCode;
+   uint8_t link;           // If LINKED.. identiy of the LINKED button
+};
+
+// Macros to decode the foreground and background colors
+#define fgColor(x) (x&0x0F)
+#define bgColor(x) (x>>4)
+
+const tButton BUTTONS[15] =  {
+   { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F13, 0x05 },
+   { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F15, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),KEY_F17, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Timer", "ON/OFF", "ON/OFF"}, (BLACK<<4 | ORANGE),KEY_F18, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Active", "Active"}, (BLACK<<4 | ORANGE),KEY_F19, 0xFF },
+
+   { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F14, 0x00 },
+   { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F16, 0xFF },
+   { BT_LINKCLR,   { "TEST", "LINK",    "",     "ACTIVE"}, (BLACK<<4 | YELLOW),KEY_F10, 0x09 },
+   { BT_MOMENTARY, { "",     "",        "BLACK","YELLOW"}, (BLACK<<4 | YELLOW),KEY_F11, 0xFF },
+   { BT_LINKSET,   { "SOME", "TXT",     "",     "ENABLE"}, (BLACK<<4 | YELLOW),KEY_F12, 0x07 },
+
+   {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F23, 0xFF },
+   {BT_LATCHING,   { "OBS",  "Speaker", "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F24, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "OW",   "OW"},     (BLACK<<4 | ORANGE),KEY_F20, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "PUBG", "PUBG"},   (BLACK<<4 | ORANGE),KEY_F21, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "SoW",  "SoW"},    (BLACK<<4 | ORANGE),KEY_F22, 0xFF }
+};
 
 
 // ~~~~~~~~~~~~~~~~~~~
@@ -241,192 +271,66 @@ void loop() {
     Serial.println(button_id,HEX);
     #endif
 
-    switch (button_id) {
-       //################## LINE 1 ##################
-       case 0x00: // Dischord MICROPHONE 
-		toggle_state(0x00);
-		if (qry_state(0x00)) {  // MUTE request
-			draw_re(0x00, WHITE, RED);
-            
-			if (qry_state(0x05)) { // Is the DISCHORD speaker muted?
-				auto_enable_mic = true; // Yes.. speaker is already muted
-			} else {
-				auto_enable_mic = false;  
-			}
-		} else {
-			draw_re(0x00);
 
-			clr_state(0x05); // Enable DISCHORD speaker
-			draw_re(0x05);
+    // For anything other than button type NONE.. we send the keyCode
+    #if defined(HID_OUTPUT)
+    if (BUTTONS[button_id].btype != BT_NONE) {
+	Keyboard.write(BUTTONS[button_id].keyCode);
+    }
+    #endif
 
-			auto_enable_mic = false;
-		}
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F13);
-		#endif
-		break;
-       case 0x01:
-		toggle_state(0x01);
-		if (qry_state(0x01)) {
-			draw_re(0x01, WHITE, RED);
-		} else {
-			draw_re(0x01);;
-		}
-       
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F15);
-		#endif
-		break;
-       case 0x02:
-       case 0x03:
-       case 0x04:
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F17+(button_id-0x02));
-		#endif
-		draw_re(button_id, BLACK,ORANGE);
+    // Update the state and re-draw the buttons
+    switch (BUTTONS[button_id].btype) {
+       case BT_MOMENTARY:
+		draw_re(button_id, bgColor(BUTTONS[button_id].color),fgColor(BUTTONS[button_id].color));
 		delay(250);
 		draw_re(button_id);
+                break;
+      case BT_LATCHING:
+		toggle_state(button_id);
+		if (qry_state(button_id)) {
+			draw_re(button_id, WHITE, RED);
+		} else {
+			draw_re(button_id);
+		}
 		break;
+       case BT_LINKCLR:
+		toggle_state(button_id);
+		if (qry_state(button_id)) {  // MUTE request
+			draw_re(button_id, WHITE, RED);
+		} else {
+			draw_re(button_id);
 
-       //################## LINE 2 ##################
-       case 0x05:  // DISCHORD speaker state
-		toggle_state(0x05);
-		if (qry_state(0x05)) { // Mute Speaker request
-			draw_re(0x05, WHITE, RED);
-      
-			// Update the MIC as well - change to MUTED
-			draw_re(0x00, WHITE, RED);
-			set_state(0x00); 
-		} else {
-			draw_re(0x05);
+                        if (qry_state(BUTTONS[button_id].link)) {
+			   clr_state(BUTTONS[button_id].link); // Enable DISCHORD speaker
+			   draw_re(BUTTONS[button_id].link);
+                        }
+		}
+		break;
+       case BT_LINKSET:
+		toggle_state(button_id);
+		if (qry_state(button_id)) { // Mute Speaker request
+			draw_re(button_id, WHITE, RED);
 
-			// check if we auto_enable_mic 
-			if (auto_enable_mic == true) { 
-				draw_re(0x00);
-				clr_state(0x00); // Update DISCHORD MIC status
-			}
-		}
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F14);
-		#endif
-		break;
-       case 0x06:
-		toggle_state(0x06);
-		if (qry_state(0x06)) {
-			draw_re(0x06, WHITE, RED);
+                        if (!(qry_state(BUTTONS[button_id].link))) {
+			    // Update the MIC as well - change to MUTED
+			    draw_re(BUTTONS[button_id].link, WHITE, RED);
+			    set_state(BUTTONS[button_id].link);
+                        }
 		} else {
-			draw_re(0x06);
+			draw_re(button_id);
 		}
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F16);
-		#endif
 		break;
-       case 0x07:
-       case 0x08:
-       case 0x09: // Currently these don't do anything
-              break;
-       //################## LINE 3 ##################
-       case 0x0A:
-		toggle_state(0x0A);
-		if (qry_state(0x0A)) {
-			draw_re(0x0A, WHITE, RED);
-		} else {
-			draw_re(0x0A);
-		}
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F23);
-		#endif
-		break;
-       case 0x0B:
-		toggle_state(0x0B);
-		if (qry_state(0x0B)) {
-			draw_re(0x0B, WHITE, RED);
-		} else {
-			draw_re(0x0B);
-		}
-		#if defined(HID_OUTPUT) 
-		Keyboard.write(KEY_F24);
-		#endif
-		break;
-       case 0x0C:
-       case 0x0D:
-       case 0x0E:
-		#if defined(HID_OUTPUT) 
-		//Keyboard.write(KEY_F22);
-		Keyboard.write(KEY_F20+(button_id-0x0C));
-		#endif
-		draw_re(button_id, BLACK, ORANGE);
-		delay(250);
-		draw_re(button_id);
-		break;
-       default: {
-              // Error Scenario - this should not be possible
-             }
-    } // End SWITCH 
+       case BT_NONE:
+       default:  {
+               /* Do Nothing */
+       }
+    }
     delay(500);
   }
 }
 
-#define BT_NONE      (0x00)
-#define BT_MOMENTARY (0x01)
-#define BT_LATCHING  (0x02)
-#define BT_LINKSET   (0x03)
-#define BT_LINKCLR   (0x04)
-
-struct tButton {
-   uint8_t btype;      /* Button Type - Momentary, Latching, Linked - if linked use upper nibble for LINK address ??*/
-   char bStrings[4][8];
-   uint8_t color;
-   uint8_t keyCode;
-   uint8_t link;
-};
-
-#define fgColor(x) (x&0x0F)
-#define bgColor(x) (x>>4)
-
-const tButton BUTTONS[15] =  {
-   { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F13, 0x05 },
-   { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F15, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),KEY_F17, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Timer", "ON/OFF", "ON/OFF"}, (BLACK<<4 | ORANGE),KEY_F18, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Scene", "Active", "Active"}, (BLACK<<4 | ORANGE),KEY_F19, 0xFF },
-
-   { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F14, 0x00 },
-   { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F16, 0xFF },
-   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
-   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
-   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
-
-   {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F23, 0xFF },
-   {BT_LATCHING,   { "OBS",  "Speaker", "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F24, 0xFF },
-   {BT_MOMENTARY,  { "OBS",  "Scene",   "OW",   "OW"},     (BLACK<<4 | ORANGE),KEY_F20, 0xFF },
-   {BT_MOMENTARY,  { "OBS",  "Scene",   "PUBG", "PUBG"},   (BLACK<<4 | ORANGE),KEY_F21, 0xFF },
-   {BT_MOMENTARY,  { "OBS",  "Scene",   "SoW",  "SoW"},    (BLACK<<4 | ORANGE),KEY_F22, 0xFF }
-};
-
-const char  _BUTTONS[15][4][8] = {
-  { "DISC", "Mic",   "ON",     "OFF" },
-  { "TS",   "Mic",   "ON",     "OFF" },
-  { "OBS",  "Scene", "Idle",   "Idle"},
-  { "OBS",  "Timer", "ON/OFF", "ON/OFF"},
-  { "OBS",  "Scene", "Active", "Active"},
-
-  { "DISC", "Speaker", "ON",   "OFF"},
-  { "TS", "Speaker", "ON",   "OFF"},
-  { "","","",""},
-  { "","","",""},
-  { "","","",""},
-
-  { "OBS", "Mic", "ON","OFF"},
-  { "OBS", "Speaker", "ON","OFF"},
-  { "OBS", "Scene", "OW","OW"},
-  { "OBS", "Scene", "PUBG","PUBG"},
-  { "OBS", "Scene", "SoW", "SoW"}
-};
-
-
 void draw_screen() {
-
   uint8_t i = 0;
 
   for (i=0;i<15;i++) {  
