@@ -1,3 +1,4 @@
+
 /* ---------------------------------------------------------------
  * streamdeck.ino 
  * 
@@ -18,8 +19,11 @@
 #include <MCUFRIEND_kbv.h>
 
 #include <TouchScreen.h>
+
+// Uncomment to enable serial console debugging
+#define DEBUG
 // Uncomment in order to print x,y,zfor all "touch" events detected
-//#define DEBUG_TOUCH
+#define DEBUG_TOUCH
 
 // Uncomment if you aren't using a button mask to delineate the virtual buttons
 //#define OUTLINE_BUTTONS
@@ -28,6 +32,9 @@
   #define HID_OUTPUT
   #include <Keyboard.h>
 #endif
+
+// Configuration Data
+#include <EEPROM.h>
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~
 // TOUCH SCREEN CALIBRATION
@@ -64,16 +71,17 @@ TouchScreen ts = TouchScreen(XP, YP, XM, YM, 338);
 #define LCD_WR A1 // LCD Write goes to Analog 1
 #define LCD_RD A0 // LCD Read goes to Analog 0
 
-// 5:6:5 Color codes (RGB)
-#define BLACK   0x0000
-#define BLUE    0x001F
-#define RED     0xF800
-#define GREEN   0x07E0
-#define CYAN    0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW  0xFFE0
-#define WHITE   0xFFFF
-#define ORANGE  0xFD00
+// Mapping Color index to 5:6:5 Color codes (RGB)
+#define BLACK   (0)
+#define BLUE    (1)
+#define RED     (2)
+#define GREEN   (3)
+#define CYAN    (4)
+#define YELLOW  (5)
+#define WHITE   (6)
+#define ORANGE  (7)
+const uint16_t PROGMEM COLOR_MAP[8] = { 0x0000, 0x001F, 0xF800, 0x07E0, 0x07FF, 0xFFE0, 0xFFFF, 0xFD00 };
+// Design decision to limit to 8 so that we can store foreground and background in a single byte
 
 MCUFRIEND_kbv tft;
 
@@ -140,7 +148,7 @@ const uint16_t PROGMEM ROW_MAP[3]    = { ROW_1, ROW_2, ROW_3 };
 // MAIN CODE BLOCK 
 //
 void setup(void) {
-  #ifdef DEBUG_TOUCH
+  #ifdef DEBUG
   Serial.begin(115200);
   while (!Serial) { ; } // Wait for Serial setup to complete 
   Serial.println(F("Stream Deck"));
@@ -246,10 +254,10 @@ void loop() {
 				auto_enable_mic = false;  
 			}
 		} else {
-			draw_re(0x00, GREEN );
+			draw_re(0x00);
 
 			clr_state(0x05); // Enable DISCHORD speaker
-			draw_re(0x05, GREEN );
+			draw_re(0x05);
 
 			auto_enable_mic = false;
 		}
@@ -262,7 +270,7 @@ void loop() {
 		if (qry_state(0x01)) {
 			draw_re(0x01, WHITE, RED);
 		} else {
-			draw_re(0x01, GREEN );;
+			draw_re(0x01);;
 		}
        
 		#if defined(HID_OUTPUT) 
@@ -277,7 +285,7 @@ void loop() {
 		#endif
 		draw_re(button_id, BLACK,ORANGE);
 		delay(250);
-		draw_re(button_id, ORANGE);
+		draw_re(button_id);
 		break;
 
        //################## LINE 2 ##################
@@ -290,11 +298,11 @@ void loop() {
 			draw_re(0x00, WHITE, RED);
 			set_state(0x00); 
 		} else {
-			draw_re(0x05, GREEN);
+			draw_re(0x05);
 
 			// check if we auto_enable_mic 
 			if (auto_enable_mic == true) { 
-				draw_re(0x00, GREEN);
+				draw_re(0x00);
 				clr_state(0x00); // Update DISCHORD MIC status
 			}
 		}
@@ -307,7 +315,7 @@ void loop() {
 		if (qry_state(0x06)) {
 			draw_re(0x06, WHITE, RED);
 		} else {
-			draw_re(0x06, GREEN);
+			draw_re(0x06);
 		}
 		#if defined(HID_OUTPUT) 
 		Keyboard.write(KEY_F16);
@@ -323,7 +331,7 @@ void loop() {
 		if (qry_state(0x0A)) {
 			draw_re(0x0A, WHITE, RED);
 		} else {
-			draw_re(0x0A, CYAN );
+			draw_re(0x0A);
 		}
 		#if defined(HID_OUTPUT) 
 		Keyboard.write(KEY_F23);
@@ -334,7 +342,7 @@ void loop() {
 		if (qry_state(0x0B)) {
 			draw_re(0x0B, WHITE, RED);
 		} else {
-			draw_re(0x0B, CYAN );
+			draw_re(0x0B);
 		}
 		#if defined(HID_OUTPUT) 
 		Keyboard.write(KEY_F24);
@@ -349,7 +357,7 @@ void loop() {
 		#endif
 		draw_re(button_id, BLACK, ORANGE);
 		delay(250);
-		draw_re(button_id, ORANGE);
+		draw_re(button_id);
 		break;
        default: {
               // Error Scenario - this should not be possible
@@ -359,7 +367,44 @@ void loop() {
   }
 }
 
-const char  BUTTONS[15][4][8] = {
+#define BT_NONE      (0x00)
+#define BT_MOMENTARY (0x01)
+#define BT_LATCHING  (0x02)
+#define BT_LINKSET   (0x03)
+#define BT_LINKCLR   (0x04)
+
+struct tButton {
+   uint8_t btype;      /* Button Type - Momentary, Latching, Linked - if linked use upper nibble for LINK address ??*/
+   char bStrings[4][8];
+   uint8_t color;
+   uint8_t keyCode;
+   uint8_t link;
+};
+
+#define fgColor(x) (x&0x0F)
+#define bgColor(x) (x>>4)
+
+const tButton BUTTONS[15] =  {
+   { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F13, 0x05 },
+   { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F15, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),KEY_F17, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Timer", "ON/OFF", "ON/OFF"}, (BLACK<<4 | ORANGE),KEY_F18, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Active", "Active"}, (BLACK<<4 | ORANGE),KEY_F19, 0xFF },
+
+   { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F14, 0x00 },
+   { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F16, 0xFF },
+   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
+   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
+   { BT_NONE,      { "",     "",        "",     ""},       (BLACK<<4 | BLACK), 0x00   , 0xFF },
+
+   {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F23, 0xFF },
+   {BT_LATCHING,   { "OBS",  "Speaker", "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F24, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "OW",   "OW"},     (BLACK<<4 | ORANGE),KEY_F20, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "PUBG", "PUBG"},   (BLACK<<4 | ORANGE),KEY_F21, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "SoW",  "SoW"},    (BLACK<<4 | ORANGE),KEY_F22, 0xFF }
+};
+
+const char  _BUTTONS[15][4][8] = {
   { "DISC", "Mic",   "ON",     "OFF" },
   { "TS",   "Mic",   "ON",     "OFF" },
   { "OBS",  "Scene", "Idle",   "Idle"},
@@ -381,26 +426,12 @@ const char  BUTTONS[15][4][8] = {
 
 
 void draw_screen() {
-  
-  // Draw the buttons
-  draw_re(0x00, GREEN);
-  draw_re(0x01, GREEN);
-  draw_re(0x02, ORANGE);
-  draw_re(0x03, ORANGE);
-  draw_re(0x04, ORANGE);
 
-  draw_re(0x05, GREEN);
-  draw_re(0x06, GREEN);
-  draw_re(0x07);
-  draw_re(0x08);
-  draw_re(0x09);
+  uint8_t i = 0;
 
-  draw_re(0x0A, CYAN);
-  draw_re(0x0B, CYAN);
-  draw_re(0x0C, ORANGE);
-  draw_re(0x0D, ORANGE);
-  draw_re(0x0E, ORANGE);
-
+  for (i=0;i<15;i++) {  
+     draw_re(i);
+  }
 }
 
 
@@ -409,31 +440,28 @@ void draw_re(uint8_t bid) {
   #ifdef OUTLINE_BUTTONS
   tft.drawRoundRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)])),
            pgm_read_word(&(ROW_MAP[ROW(bid)])), 
-           BWIDTH, BHEIGHT, min(BWIDTH,BHEIGHT)/4, WHITE);
+           BWIDTH, BHEIGHT, min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
   #endif
+
+  draw_re(bid, fgColor(BUTTONS[bid].color), BUTTONS[bid].bStrings[0], BUTTONS[bid].bStrings[1],BUTTONS[bid].bStrings[2], bgColor(BUTTONS[bid].color));
 }
 
-void draw_re(uint8_t bid, uint16_t color) {
-   // Button(s) - normal state - Strings[0-2]
-   draw_re(bid, color, BUTTONS[bid][0], BUTTONS[bid][1],BUTTONS[bid][2], BLACK);
-}
-
-void draw_re(uint8_t bid, uint16_t color, uint16_t bgcolor) {
+void draw_re(uint8_t bid, uint8_t color, uint8_t bgcolor) {
    // Button(s) - pressed state - Strings[0-1,3]
-   draw_re(bid, color, BUTTONS[bid][0], BUTTONS[bid][1],BUTTONS[bid][3],bgcolor);
+   draw_re(bid, color, BUTTONS[bid].bStrings[0], BUTTONS[bid].bStrings[1],BUTTONS[bid].bStrings[3],bgcolor);
 }
 
-void draw_re(uint8_t bid, uint16_t color, String txt1, String txt2, String txt3, uint16_t bgcolor) {
+void draw_re(uint8_t bid, uint8_t color, String txt1, String txt2, String txt3, uint8_t bgcolor) {
   int x = pgm_read_word(&(COLUMN_MAP[COLUMN(bid)]));
   int y = pgm_read_word(&(ROW_MAP[ROW(bid)]));
   int txtdst = 5;
 
   #ifdef OUTLINE_BUTTONS
-  tft.drawRoundRect(x, y, BWIDTH, BHEIGHT,min(BWIDTH,BHEIGHT)/4, WHITE);
+  tft.drawRoundRect(x, y, BWIDTH, BHEIGHT,min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
   #endif
-  tft.fillRoundRect(x + 1, y + 1, BWIDTH-2, BHEIGHT-2,min(BWIDTH-2, BHEIGHT-2)/4, bgcolor);
+  tft.fillRoundRect(x + 1, y + 1, BWIDTH-2, BHEIGHT-2,min(BWIDTH-2, BHEIGHT-2)/4, pgm_read_word(&(COLOR_MAP[bgcolor])));
   
-  tft.setTextColor(color);
+  tft.setTextColor(pgm_read_word(&(COLOR_MAP[color])));
   //tft.setCursor(x + txtdst, y + txtdst+10);
   tft.setCursor(x + 47-txt1.length()*6, y + txtdst+10);
   tft.print(txt1);
