@@ -20,6 +20,11 @@
  *       - (alternatively could read from SD card)
  *    CTRL/ALT Keypress combinations?
  *       - Could use a bit mask to denote if any KEY modifiers should be used
+ *
+ * EEPROM map
+ *   0x00-0x01: 16 bit CRC of the BUTTONS array
+ *   0x02.. (2+sizeof(BUTTONS)): alternate button configuration
+ *   
  */
 
 // Update these to reflect your display/touchscreen
@@ -27,11 +32,12 @@
 #include <MCUFRIEND_kbv.h>
 
 #include <TouchScreen.h>
+#include <EEPROM.h>
 
 // Uncomment to enable serial console debugging
 // Note: Leonardo will pause until a serial connection is established
 //
-//#define DEBUG
+#define DEBUG
 
 
 // Uncomment in order to print x,y,z for all "touch" events detected
@@ -153,7 +159,7 @@ struct tButton {
 #define fgColor(x) (x&0x0F)
 #define bgColor(x) (x>>4)
 
-const tButton BUTTONS[15] =  {
+tButton BUTTONS[15] =  {
    { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F13, 0x05 },
    { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F15, 0xFF },
    { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),KEY_F17, 0xFF },
@@ -163,7 +169,7 @@ const tButton BUTTONS[15] =  {
    { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F14, 0x00 },
    { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F16, 0xFF },
    { BT_LINKCLR,   { "TEST", "LINK",    "",     "ACTIVE"}, (BLACK<<4 | YELLOW),KEY_F10, 0x09 },
-   { BT_MOMENTARY, { "",     "",        "BLACK","YELLOW"}, (BLACK<<4 | YELLOW),KEY_F11, 0xFF },
+   { BT_MOMENTARY, { "",     "",        "BLACK","YELLOW"}, (WHITE<<4 | BLUE),  KEY_F11, 0xFF },
    { BT_LINKSET,   { "SOME", "TXT",     "",     "ENABLE"}, (BLACK<<4 | YELLOW),KEY_F12, 0x07 },
 
    {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F23, 0xFF },
@@ -179,22 +185,51 @@ const tButton BUTTONS[15] =  {
 //
 void setup(void) {
   #ifdef DEBUG
-  Serial.begin(115200);
-  while (!Serial) { ; } // Wait for Serial setup to complete 
-  Serial.println(F("Stream Deck"));
+  	Serial.begin(115200);
+  	while (!Serial) { ; } // Wait for Serial setup to complete 
+  	Serial.println(F("Stream Deck"));
   #endif
 
+  // Setup the LCD (Hard-Coded value vs probing the hardware)
   tft.reset();
-  tft.begin(0x9486); // Hard-coded versus probing the hardware
+  tft.begin(0x9486); 
   tft.fillScreen(BLACK);
 
   tft.setRotation(3);
   tft.setTextSize(2); // Same font size everywhere, so only do this once
 
-  draw_screen(); // Render default buttons
+
+ // Debugging
+ // writeButtons();
+
+#ifdef CORRUPT_EEPROM
+  writeCRC(0xDEADC0DE);
+#endif
+
+  Serial.println("Data Written"); 
+  // If EEPROM CRC checks out.. read the updated profile into RAM
+  unsigned long tempCRC = readCRC();
+
+  if (tempCRC != eeprom_crc()) {
+     // CRC failed - log the error but then use the integrated DEFAULTS
+  	Serial.print(F("CRC Error:0x"));
+  	Serial.print(tempCRC, HEX);
+        Serial.print("  vs 0x");
+        Serial.println(eeprom_crc(),HEX);
+  } else {
+     // CRC is good : copy the block into the RAM array
+     int i;
+     uint8_t *temp = (uint8_t*) &(BUTTONS[0]);
+     for (i=sizeof(unsigned long); i<sizeof(unsigned long)+sizeof(BUTTONS);i++){
+        *temp = EEPROM[i];
+        temp++; 
+     }
+  }
+  // Render default buttons
+  draw_screen(); 
   
   #if defined(HID_OUTPUT)
-  Keyboard.begin();
+  	Keyboard.begin();
   #endif
 }
 
@@ -211,11 +246,11 @@ void loop() {
     p.y = map(p.y, TS_MINY, TS_MAXY, 0, 320);
 
    #ifdef DEBUG_TOUCH
-   Serial.print(p.x);
-   Serial.print(",");
-   Serial.print(p.y);
-   Serial.print(",");
-   Serial.println(p.z);
+   	Serial.print(p.x);
+   	Serial.print(",");
+   	Serial.print(p.y);
+   	Serial.print(",");
+   	Serial.println(p.z);
    #endif
 
     //################## Code for actions here ##################
@@ -267,8 +302,8 @@ void loop() {
 
     // button_id now contains a value in range of 0x00 - 0x0E
     #ifdef DEBUG_TOUCH
-    Serial.print(F("ButtonId:"));
-    Serial.println(button_id,HEX);
+    	Serial.print(F("ButtonId:"));
+    	Serial.println(button_id,HEX);
     #endif
 
 
@@ -282,8 +317,10 @@ void loop() {
     // Update the state and re-draw the buttons
     switch (BUTTONS[button_id].btype) {
        case BT_MOMENTARY:
+                // Draw with inverted coloring
 		draw_re(button_id, bgColor(BUTTONS[button_id].color),fgColor(BUTTONS[button_id].color));
 		delay(250);
+                // Restore to original Format
 		draw_re(button_id);
                 break;
       case BT_LATCHING:
@@ -333,6 +370,7 @@ void loop() {
 void draw_screen() {
   uint8_t i = 0;
 
+  // Render each button - default state
   for (i=0;i<15;i++) {  
      draw_re(i);
   }
@@ -340,16 +378,17 @@ void draw_screen() {
 
 
 void draw_re(uint8_t bid) {
-  // Empty Button(s)
   #ifdef OUTLINE_BUTTONS
-  tft.drawRoundRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)])),
-           pgm_read_word(&(ROW_MAP[ROW(bid)])), 
-           BWIDTH, BHEIGHT, min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
+        // Empty Button(s)
+  	tft.drawRoundRect(pgm_read_word(&(COLUMN_MAP[COLUMN(bid)])),
+		pgm_read_word(&(ROW_MAP[ROW(bid)])), 
+		BWIDTH, BHEIGHT, min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
   #endif
 
   draw_re(bid, fgColor(BUTTONS[bid].color), BUTTONS[bid].bStrings[0], BUTTONS[bid].bStrings[1],BUTTONS[bid].bStrings[2], bgColor(BUTTONS[bid].color));
 }
 
+// If only BID + 2 colors .. then render ALTERNATE text as 3rd line
 void draw_re(uint8_t bid, uint8_t color, uint8_t bgcolor) {
    // Button(s) - pressed state - Strings[0-1,3]
    draw_re(bid, color, BUTTONS[bid].bStrings[0], BUTTONS[bid].bStrings[1],BUTTONS[bid].bStrings[3],bgcolor);
@@ -361,16 +400,67 @@ void draw_re(uint8_t bid, uint8_t color, String txt1, String txt2, String txt3, 
   int txtdst = 5;
 
   #ifdef OUTLINE_BUTTONS
-  tft.drawRoundRect(x, y, BWIDTH, BHEIGHT,min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
+  	tft.drawRoundRect(x, y, BWIDTH, BHEIGHT,min(BWIDTH,BHEIGHT)/4, pgm_read_word(&(COLOR_MAP[WHITE])));
   #endif
   tft.fillRoundRect(x + 1, y + 1, BWIDTH-2, BHEIGHT-2,min(BWIDTH-2, BHEIGHT-2)/4, pgm_read_word(&(COLOR_MAP[bgcolor])));
   
   tft.setTextColor(pgm_read_word(&(COLOR_MAP[color])));
-  //tft.setCursor(x + txtdst, y + txtdst+10);
+
+  // Attempt to center the text on the BUTTON
   tft.setCursor(x + 47-txt1.length()*6, y + txtdst+10);
   tft.print(txt1);
   tft.setCursor(x + 47-txt2.length()*6, y + txtdst + 30);
   tft.print(txt2);
   tft.setCursor(x + 47-txt3.length()*6, y + txtdst + 50);
   tft.print(txt3);
+}
+
+void writeCRC(unsigned long crc) {
+   int i ;
+   for (i=sizeof(unsigned long);i>0; i--) {
+      EEPROM[i-1] = crc&0xFF;
+      crc = crc>>8; 
+   }
+}
+
+void writeButtons(void) {
+    int i;
+    uint8_t *temp = (uint8_t*) &(BUTTONS[0]);
+
+     for (i=sizeof(unsigned long); i<sizeof(unsigned long)+sizeof(BUTTONS);i++){
+        EEPROM.write(i,*temp);
+        temp++; 
+     }
+
+     // Now update the CRC for this block of data
+     writeCRC(eeprom_crc());
+}
+
+unsigned long readCRC(void) {
+   unsigned long temp = 0x00;
+   int i ;
+   for (i=0;i<sizeof(unsigned long); i++) {
+      temp = (temp << 8) + EEPROM[i];
+   }
+   return (temp);
+}
+
+// CRC routines to validate incoming data and/or EEPROM
+unsigned long eeprom_crc(void) {
+  const unsigned long crc_table[16] = {
+    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
+    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
+    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+  };
+
+  unsigned long crc = ~0L;
+
+  for (int index = sizeof(unsigned long) ; index < sizeof(unsigned long)+sizeof(BUTTONS) ; ++index) {
+    crc = crc_table[(crc ^ EEPROM[index]) & 0x0f] ^ (crc >> 4);
+    crc = crc_table[(crc ^ (EEPROM[index] >> 4)) & 0x0f] ^ (crc >> 4);
+    crc = ~crc;
+  }
+
+  return crc;
 }
