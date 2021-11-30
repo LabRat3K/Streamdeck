@@ -464,3 +464,70 @@ unsigned long eeprom_crc(void) {
 
   return crc;
 }
+
+tButton temp;
+uint8_t bid = 0xFF;
+
+uint8_t hex2dec(char * hex) {
+   uint8_t retval = 0x00;
+   uint8_t i;
+
+    for(i = 0; i < 2; i++) {
+        if(hex[i] >= '0' && hex[i] <= '9')
+        {
+            retval = retval << 4;
+            retval += hex[i] - '0';
+        }
+        else if(hex[i] >= 'A' && hex[i] <= 'F')
+        {
+            retval = retval << 4;
+            retval += 10+hex[i] - 'A';
+        }
+        else if(hex[i] >= 'a' && hex[i] <= 'f')
+        {
+            retval = retval << 4;
+            retval += 10+hex[i] - 'a';
+        }
+    }
+    return retval;
+}
+
+int parse_str(char * input) {
+           char *token;
+           int j=0;
+
+
+     // Parse the ButtonId 
+     token = strtok(input,",");
+     if (token == NULL) return -1;
+     bid = hex2dec(token);
+     if (bid>14) return -1;
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -2;
+     temp.bType = hex2dec(token);
+     if (temp.bType > 4) return -2;
+
+     for (j=0;j<4;j++) {
+        token = strtok(NULL,",");
+        if (token == NULL) return -(3+j);
+        strncpy(temp.bStrings[j],token,8);
+     }
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -7;
+     temp.color = hex2dec(token);
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -8;
+     temp.keyCode = hex2dec(token);
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -9;
+     temp.link = hex2dec(token);
+     if (temp.link > 14) return -9;
+     if (temp.link == bid) return -9; // Can't link to yourself
+
+     return 0;
+}
+
