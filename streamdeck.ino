@@ -180,15 +180,18 @@ tButton BUTTONS[15] =  {
 };
 
 
+// Forward Declaration
+void writeButtons(void);
+
 // ~~~~~~~~~~~~~~~~~~~
 // MAIN CODE BLOCK 
 //
 void setup(void) {
-  #ifdef DEBUG
-  	Serial.begin(115200);
-  	while (!Serial) { ; } // Wait for Serial setup to complete 
-  	Serial.println(F("Stream Deck"));
-  #endif
+  unsigned long time=millis();
+
+  Serial.begin(115200);
+  while ((!Serial) && (millis()<time+5000)) { ; } // Wait for Serial setup to complete
+  Serial.println(F("Stream Deck"));
 
   // Setup the LCD (Hard-Coded value vs probing the hardware)
   tft.reset();
@@ -198,15 +201,14 @@ void setup(void) {
   tft.setRotation(3);
   tft.setTextSize(2); // Same font size everywhere, so only do this once
 
-
  // Debugging
  // writeButtons();
 
 #ifdef CORRUPT_EEPROM
   writeCRC(0xDEADC0DE);
+  Serial.println("Data Corrupted");
 #endif
 
-  Serial.println("Data Written"); 
   // If EEPROM CRC checks out.. read the updated profile into RAM
   unsigned long tempCRC = readCRC();
 
@@ -233,8 +235,149 @@ void setup(void) {
   #endif
 }
 
+// --------------------------------------------------
+// Serial Input - parse string
+// Q,bid
+// Q,bid,btype,str1,str2,str3,str4,color,keycode,link
+// --------------------------------------------------
+tButton temp;
+uint8_t bid = 0xFF;
+
+uint8_t hex2dec(char * hex) {
+   uint8_t retval = 0x00;
+   uint8_t i;
+
+    for(i = 0; i < 2; i++) {
+        if(hex[i] >= '0' && hex[i] <= '9')
+        {
+            retval = retval << 4;
+            retval += hex[i] - '0';
+        }
+        else if(hex[i] >= 'A' && hex[i] <= 'F')
+        {
+            retval = retval << 4;
+            retval += 10+hex[i] - 'A';
+        }
+        else if(hex[i] >= 'a' && hex[i] <= 'f')
+        {
+            retval = retval << 4;
+            retval += 10+hex[i] - 'a';
+        }
+    }
+    return retval;
+}
+
+void dump_data(uint8_t bid, tButton * button) {
+    Serial.print(bid,HEX);
+    Serial.print(",");
+    Serial.print(button->btype,HEX);
+    Serial.print(",");
+    Serial.print(button->bStrings[0]);
+    Serial.print(",");
+    Serial.print(button->bStrings[1]);
+    Serial.print(",");
+    Serial.print(button->bStrings[2]);
+    Serial.print(",");
+    Serial.print(button->bStrings[3]);
+    Serial.print(",");
+    Serial.print(button->color,HEX);
+    Serial.print(",");
+    Serial.print(button->keyCode,HEX);
+    Serial.print(",");
+    Serial.println(button->link,HEX);
+}
+
+int write_str(char * input) {
+           char *token;
+           int j=0;
+
+     // Parse the ButtonId
+     token = strtok(input,",");
+     if (token == NULL) return -1;
+     bid = hex2dec(token);
+     if (bid>14) return -1;
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -2;
+     temp.btype = hex2dec(token);
+     if (temp.btype > 4) return -2;
+
+     for (j=0;j<4;j++) {
+        token = strtok(NULL,",");
+        if (token == NULL) return -(3+j);
+        strncpy(temp.bStrings[j],token,8);
+     }
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -7;
+     temp.color = hex2dec(token);
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -8;
+     temp.keyCode = hex2dec(token);
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -9;
+     temp.link = hex2dec(token);
+     if (temp.link > 14) return -9;
+     if (temp.link == bid) return -9; // Can't link to yourself
+
+     // Data is good - write it to the EEPROM
+     memcpy(&(BUTTONS[bid]),&temp,sizeof(tButton));
+     return 0;
+}
+
+void command_parse() {
+   char parseBuffer[45];
+   int  retCode = 0x00;
+
+   Serial.readString().toCharArray(parseBuffer, 42);
+
+   if (parseBuffer[0] == 'W') {
+      retCode =  write_str(&(parseBuffer[2]));
+
+      if (retCode < 0) {
+         Serial.print("Error parsing string: ");
+         Serial.println(retCode);
+         return;
+      }
+   }
+
+   if (parseBuffer[0] == 'Q') {
+     char *token;
+
+     // Parse the ButtonId
+     token = strtok(&(parseBuffer[2]),",");
+     if (token == NULL) {
+         Serial.println("Invalid Button id");
+         return;
+     }
+     bid = hex2dec(token);
+     if (bid<15) {
+        // Query - read and print
+        dump_data(bid, &(BUTTONS[bid]));
+     }
+   }
+
+  if (parseBuffer[0] == 'F') {
+     parseBuffer[7] = 0;
+     if (!strcmp(&parseBuffer[1],"LabRat")) {
+        writeButtons();
+     }
+  }
+  if (parseBuffer[0] == 'C') {
+     parseBuffer[7] = 0;
+     if (!strcmp(&parseBuffer[1],"taRbaL")) {
+        writeCRC(0xDEADC0DE);
+     }
+  }
+}
+
 void loop() {
   TSPoint p = ts.getPoint();
+  if (Serial.available()>0) {
+      command_parse();
+  }
 
   // Sharing pins: fix the directions of the touchscreen pins
   pinMode(XM, OUTPUT);
@@ -364,6 +507,7 @@ void loop() {
        }
     }
     delay(500);
+    Serial.print(".");
   }
 }
 
@@ -464,70 +608,3 @@ unsigned long eeprom_crc(void) {
 
   return crc;
 }
-
-tButton temp;
-uint8_t bid = 0xFF;
-
-uint8_t hex2dec(char * hex) {
-   uint8_t retval = 0x00;
-   uint8_t i;
-
-    for(i = 0; i < 2; i++) {
-        if(hex[i] >= '0' && hex[i] <= '9')
-        {
-            retval = retval << 4;
-            retval += hex[i] - '0';
-        }
-        else if(hex[i] >= 'A' && hex[i] <= 'F')
-        {
-            retval = retval << 4;
-            retval += 10+hex[i] - 'A';
-        }
-        else if(hex[i] >= 'a' && hex[i] <= 'f')
-        {
-            retval = retval << 4;
-            retval += 10+hex[i] - 'a';
-        }
-    }
-    return retval;
-}
-
-int parse_str(char * input) {
-           char *token;
-           int j=0;
-
-
-     // Parse the ButtonId 
-     token = strtok(input,",");
-     if (token == NULL) return -1;
-     bid = hex2dec(token);
-     if (bid>14) return -1;
-
-     token = strtok(NULL,",");
-     if (token == NULL) return -2;
-     temp.bType = hex2dec(token);
-     if (temp.bType > 4) return -2;
-
-     for (j=0;j<4;j++) {
-        token = strtok(NULL,",");
-        if (token == NULL) return -(3+j);
-        strncpy(temp.bStrings[j],token,8);
-     }
-
-     token = strtok(NULL,",");
-     if (token == NULL) return -7;
-     temp.color = hex2dec(token);
-
-     token = strtok(NULL,",");
-     if (token == NULL) return -8;
-     temp.keyCode = hex2dec(token);
-
-     token = strtok(NULL,",");
-     if (token == NULL) return -9;
-     temp.link = hex2dec(token);
-     if (temp.link > 14) return -9;
-     if (temp.link == bid) return -9; // Can't link to yourself
-
-     return 0;
-}
-
