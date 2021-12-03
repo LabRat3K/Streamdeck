@@ -20,7 +20,7 @@ updated by LabRat - restructured code trying to make room for Graphics routines.
 ===============================
 
 ### Developments
-Original concept code from Tekks, but not much of it remains. I've re-written the majority of this to make it completely data/table driven. We can now look to adding the ability to download custom profiles (and store in the EEPROM) of the device. Alas, no graphics as we run out of code space trying to include that functionality along with everything else. 
+Original concept code from Tekks, but not much of it remains. This has been re-written to make it completely data/table driven. Serial API's are included to allow reprogramming (and copying to EEPROM) the button maps. Alas, no graphics as we run out of code space trying to include that functionality along with everything else. 
 
 ===============================
 
