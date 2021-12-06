@@ -1,3 +1,4 @@
+
 /* ---------------------------------------------------------------
  * streamdeck.ino 
  * 
@@ -39,6 +40,8 @@
 //
 #define DEBUG
 
+// Uncomment to force use of ROM based values
+//#define CORRUPT_EEPROM
 
 // Uncomment in order to print x,y,z for all "touch" events detected
 //#define DEBUG_TOUCH
@@ -151,6 +154,7 @@ struct tButton {
    uint8_t btype;          // Button Type - Momentary, Latching, Linked
    char    bStrings[4][8]; // 3 lines plus alternate third line when ENABLED
    uint8_t color;
+   uint8_t crtlKeys;
    uint8_t keyCode;
    uint8_t link;           // If LINKED.. identiy of the LINKED button
 };
@@ -159,23 +163,34 @@ struct tButton {
 #define fgColor(x) (x&0x0F)
 #define bgColor(x) (x>>4)
 
+#define CRTL_NONE (0x00)
+
+#define LEFT_CTRL   (0x01)
+#define LEFT_SHIFT  (0x02)
+#define LEFT_ALT    (0x04)
+#define LEFT_GUI    (0x08)
+#define RIGHT_CTRL  (0x10)
+#define RIGHT_SHIFT (0x20)
+#define RIGHT_ALT   (0x40)
+#define RIGHT_GUI   (0x80)
+
 tButton BUTTONS[15] =  {
-   { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F13, 0x05 },
-   { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), KEY_F15, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),KEY_F17, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Timer", "ON/OFF", "ON/OFF"}, (BLACK<<4 | ORANGE),KEY_F18, 0xFF },
-   { BT_MOMENTARY, { "OBS",  "Scene", "Active", "Active"}, (BLACK<<4 | ORANGE),KEY_F19, 0xFF },
+   { BT_LINKCLR,   { "DISC", "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), CRTL_NONE, KEY_F13, 0x05 },
+   { BT_LATCHING,  { "TS",   "Mic",   "ON",     "OFF" },   (BLACK<<4 | GREEN), CRTL_NONE, KEY_F15, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Idle",   "Idle"},   (BLACK<<4 | ORANGE),CRTL_NONE, KEY_F17, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Timer", "ON/OFF", "ON/OFF"}, (BLACK<<4 | ORANGE),CRTL_NONE, KEY_F18, 0xFF },
+   { BT_MOMENTARY, { "OBS",  "Scene", "Active", "Active"}, (BLACK<<4 | ORANGE),CRTL_NONE, KEY_F19, 0xFF },
 
-   { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F14, 0x00 },
-   { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), KEY_F16, 0xFF },
-   { BT_LINKCLR,   { "TEST", "LINK",    "",     "ACTIVE"}, (BLACK<<4 | YELLOW),KEY_F10, 0x09 },
-   { BT_MOMENTARY, { "",     "",        "BLACK","YELLOW"}, (WHITE<<4 | BLUE),  KEY_F11, 0xFF },
-   { BT_LINKSET,   { "SOME", "TXT",     "",     "ENABLE"}, (BLACK<<4 | YELLOW),KEY_F12, 0x07 },
+   { BT_LINKSET,   { "DISC", "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), CRTL_NONE, KEY_F14, 0x00 },
+   { BT_LATCHING,  { "TS",   "Speaker", "ON",   "OFF"},    (BLACK<<4 | GREEN), CRTL_NONE, KEY_F16, 0xFF },
+   { BT_LINKCLR,   { "TEST", "LINK",    "",     "ACTIVE"}, (BLACK<<4 | YELLOW),CRTL_NONE, KEY_F10, 0x09 },
+   { BT_MOMENTARY, { "",     "",        "BLACK","YELLOW"}, (WHITE<<4 | BLUE),  CRTL_NONE, KEY_F11, 0xFF },
+   { BT_LINKSET,   { "SOME", "TXT",     "",     "ENABLE"}, (BLACK<<4 | YELLOW),CRTL_NONE, KEY_F12, 0x07 },
 
-   {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F23, 0xFF },
-   {BT_LATCHING,   { "OBS",  "Speaker", "ON",   "OFF"},    (BLACK<<4 | CYAN),  KEY_F24, 0xFF },
-   {BT_MOMENTARY,  { "OBS",  "Scene",   "OW",   "OW"},     (BLACK<<4 | ORANGE),KEY_F20, 0xFF },
-   {BT_MOMENTARY,  { "OBS",  "Scene",   "PUBG", "PUBG"},   (BLACK<<4 | ORANGE),KEY_F21, 0xFF },
+   {BT_LATCHING,   { "OBS",  "Mic",     "ON",   "OFF"},    (BLACK<<4 | CYAN),  CRTL_NONE, KEY_F23, 0xFF },
+   {BT_LATCHING,   { "OBS",  "Speaker", "ON",   "OFF"},    (BLACK<<4 | CYAN),  CRTL_NONE, KEY_F24, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "OW",   "OW"},     (BLACK<<4 | ORANGE),CRTL_NONE, KEY_F20, 0xFF },
+   {BT_MOMENTARY,  { "OBS",  "Scene",   "PUBG", "PUBG"},   (BLACK<<4 | ORANGE),CRTL_NONE, KEY_F21, 0xFF },
    {BT_MOMENTARY,  { "OBS",  "Scene",   "SoW",  "SoW"},    (BLACK<<4 | ORANGE),KEY_F22, 0xFF }
 };
 
@@ -235,11 +250,11 @@ void setup(void) {
   #endif
 }
 
-// --------------------------------------------------
+// -----------------------------------------------------------
 // Serial Input - parse string
 // Q,bid
-// Q,bid,btype,str1,str2,str3,str4,color,keycode,link
-// --------------------------------------------------
+// Q,bid,btype,str1,str2,str3,str4,color,crtlKeys,keycode,link
+// -----------------------------------------------------------
 tButton temp;
 uint8_t bid = 0xFF;
 
@@ -282,6 +297,8 @@ void dump_data(uint8_t bid, tButton * button) {
     Serial.print(",");
     Serial.print(button->color,HEX);
     Serial.print(",");
+    Serial.print(button->crtlKeys,HEX);
+    Serial.print(",");
     Serial.print(button->keyCode,HEX);
     Serial.print(",");
     Serial.println(button->link,HEX);
@@ -314,13 +331,17 @@ int write_str(char * input) {
 
      token = strtok(NULL,",");
      if (token == NULL) return -8;
-     temp.keyCode = hex2dec(token);
+     temp.crtlKeys = hex2dec(token);
 
      token = strtok(NULL,",");
      if (token == NULL) return -9;
+     temp.keyCode = hex2dec(token);
+
+     token = strtok(NULL,",");
+     if (token == NULL) return -10;
      temp.link = hex2dec(token);
-     if (temp.link > 14) return -9;
-     if (temp.link == bid) return -9; // Can't link to yourself
+     if (temp.link > 14) return -109;
+     if (temp.link == bid) return -109; // Can't link to yourself
 
      // Data is good - write it to the EEPROM
      memcpy(&(BUTTONS[bid]),&temp,sizeof(tButton));
@@ -453,7 +474,19 @@ void loop() {
     // For anything other than button type NONE.. we send the keyCode
     #if defined(HID_OUTPUT)
     if (BUTTONS[button_id].btype != BT_NONE) {
+	uint8_t tempKey = BUTTONS[button_id].crtlKeys;
+	if (tempKey) {
+           if (tempKey & LEFT_CTRL)   Keyboard.press(KEY_LEFT_CTRL);
+           if (tempKey & LEFT_SHIFT)  Keyboard.press(KEY_LEFT_SHIFT);
+           if (tempKey & LEFT_ALT)    Keyboard.press(KEY_LEFT_ALT);
+           if (tempKey & LEFT_GUI)    Keyboard.press(KEY_LEFT_GUI);
+           if (tempKey & RIGHT_CTRL)  Keyboard.press(KEY_LEFT_CTRL);
+           if (tempKey & RIGHT_SHIFT) Keyboard.press(KEY_LEFT_SHIFT);
+           if (tempKey & RIGHT_ALT)   Keyboard.press(KEY_LEFT_ALT);
+           if (tempKey & RIGHT_GUI)   Keyboard.press(KEY_LEFT_GUI);
+        }
 	Keyboard.write(BUTTONS[button_id].keyCode);
+	Keyboard.releaseAll();
     }
     #endif
 
