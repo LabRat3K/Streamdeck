@@ -253,7 +253,7 @@ void setup(void) {
 // -----------------------------------------------------------
 // Serial Input - parse string
 // Q,bid
-// Q,bid,btype,str1,str2,str3,str4,color,crtlKeys,keycode,link
+// W,bid,btype,str1,str2,str3,str4,color,crtlKeys,keycode,link
 // -----------------------------------------------------------
 tButton temp;
 uint8_t bid = 0xFF;
@@ -377,6 +377,7 @@ void command_parse() {
      if (bid<15) {
         // Query - read and print
         dump_data(bid, &(BUTTONS[bid]));
+	return;
      }
    }
 
@@ -384,14 +385,29 @@ void command_parse() {
      parseBuffer[7] = 0;
      if (!strcmp(&parseBuffer[1],"LabRat")) {
         writeButtons();
+	return;
      }
   }
   if (parseBuffer[0] == 'C') {
      parseBuffer[7] = 0;
      if (!strcmp(&parseBuffer[1],"taRbaL")) {
         writeCRC(0xDEADC0DE);
+	return;
      }
   }
+  Serial.println(F("Q,<bid> - print config for button."));
+  Serial.println(F("W,<bid>,<btype>,<str1>.<str2>,<str3>,<str4>,<color>,<crtlKeys>,<keycode>,<link>"));
+  Serial.println(F("  <bid>   - button id: 0 .. E"));
+  Serial.println(F("  <btype> - button type - 0:none, 1:momentary, 2:latching, 3:link_set, 4:link_clear"));
+  Serial.println(F("  <str1>..<str4> - strings 1-3: Text on Buttons (7 char max) String 4: 3rd line alternate"));
+  Serial.println(F("  <color> - <bg>|<fg> (upper/lower nibbles)"));
+  Serial.println(F("     0: Black, 1: Blue, 2: Red, 3: Green, 4: Cyan, 5: Yellow, 6: White, 7: Orange"));
+  Serial.println(F("  <crtlKeys> - <right>|<left> (upper/lowernibbles) key modifiers "));
+  Serial.println(F("     1:CTRL, 2: SHIFT, 4: ALT, 8: GUI"));
+  Serial.println(F("  <keycode> - hex keypress"));
+  Serial.println(F("  <link> - Id of the linked button"));
+  Serial.println(F("FLabRat  - Write config into the flash (eeprom)"));
+  Serial.println(F("CtaRbaL  - Invalidate CSUM in the flash"));
 }
 
 void loop() {
